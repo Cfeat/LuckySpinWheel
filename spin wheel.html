@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>可定制转盘</title>
+  <style>
+    :root {
+      --primary-color: #ff4757;
+      --transition-duration: 0.3s;
+    }
+
+    body {
+      display: flex; 
+      flex-direction: column; 
+      align-items: center; 
+      font-family: 'Segoe UI', system-ui;
+      background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+      min-height: 100vh;
+    }
+
+    #wheelContainer {
+      position: relative;
+      margin: 2rem 0;
+    }
+
+    #wheelCanvas {
+      box-shadow: 0 10px 20px rgba(0,0,0,0.15);
+      border-radius: 50%;
+      transition: transform var(--transition-duration);
+    }
+
+    #pointer {
+      position: absolute;
+      top: -20px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 0;
+      height: 0;
+      border-left: 20px solid transparent;
+      border-right: 20px solid transparent;
+      border-top: 40px solid var(--primary-color);
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
+    }
+
+    .controls {
+      display: grid;
+      gap: 1rem;
+      max-width: 400px;
+      width: 90%;
+    }
+
+    input {
+      padding: 12px;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      font-size: 16px;
+      transition: border-color var(--transition-duration);
+    }
+
+    input:focus {
+      outline: none;
+      border-color: var(--primary-color);
+      box-shadow: 0 0 8px rgba(255,71,87,0.2);
+    }
+
+    button {
+      padding: 12px 24px;
+      background: var(--primary-color);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 16px;
+      transition: 
+        transform 0.1s,
+        background-color var(--transition-duration);
+    }
+
+    button:hover {
+      background-color: #ff6b81;
+    }
+
+    button:active {
+      transform: scale(0.98);
+    }
+
+    @media (max-width: 480px) {
+      #wheelCanvas {
+        width: 280px!important;
+        height: 280px!important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>幸运大转盘</h1>
+  <div id="wheelContainer">
+    <div id="pointer"></div>
+    <canvas id="wheelCanvas"></canvas>
+  </div>
+  <div class="controls">
+    <input 
+      id="segmentsInput" 
+      placeholder="请输入奖品（用逗号分隔）" 
+      value="iPhone 15,100元红包,免单券,优惠券,谢谢参与"
+    >
+    <button id="updateBtn">更新转盘</button>
+    <button id="spinBtn">立即抽奖</button>
+  </div>
+
+  <script>
+    class LuckyWheel {
+      constructor(canvasId) {
+        this.canvas = document.getElementById(canvasId);
+        this.ctx = this.canvas.getContext('2d');
+        this.radius = 0;
+        this.segments = [];
+        this.colors = [];
+        this.startAngle= -Math.PI / 2;
+        this.isSpinning = false;
+        
+        this.initCanvas();
+        window.addEventListener('resize', () => this.initCanvas());
+      }
+
+      initCanvas() {
+        const size = Math.min(window.innerWidth * 0.8, 400);
+        this.canvas.width = size;
+        this.canvas.height = size;
+        this.radius = size / 2;
+        this.drawWheel();
+      }
+
+      generateColors(count) {
+        const colors = [];
+        const goldenRatio = 0.618033988749895;
+        let hue = Math.random();
+        
+        for(let i = 0; i < count; i++) {
+          hue += goldenRatio;
+          hue %= 1;
+          colors.push(`hsl(${Math.floor(hue * 360)}, 70%, 65%)`);
+        }
+        return colors;
+      }
+
+      updateSegments(texts) {
+        if (texts.length < 2) throw new Error('至少需要2个分区');
+        this.segments = texts;
+        this.colors = this.generateColors(texts.length);
+        this.drawWheel();
+      }
+
+      drawWheel() {
+        const { ctx, radius, segments } = this;
+        const arc = (2 * Math.PI) / segments.length;
+        
+        ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        // 绘制渐变背景
+        const gradient = ctx.createRadialGradient(
+          radius, radius, 0, 
+          radius, radius, radius
+        );
+        gradient.addColorStop(0, '#ffffff');
+        gradient.addColorStop(1, '#f8f9fa');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        // 绘制扇形
+        segments.forEach((text, i) => {
+          const angle = this.startAngle + i * arc;
+          ctx.beginPath();
+          ctx.fillStyle = this.colors[i];
+          ctx.moveTo(radius, radius);
+          ctx.arc(radius, radius, radius - 10, angle, angle + arc);
+          ctx.closePath();
+          ctx.fill();
+
+          // 绘制文字
+          ctx.save();
+          ctx.translate(radius, radius);
+          ctx.rotate(angle + arc / 2);
+          ctx.textAlign = 'right';
+          ctx.fillStyle = '#2d3436';
+          ctx.font = `${radius * 0.08}px 'Microsoft YaHei'`;
+          ctx.shadowColor = 'rgba(0,0,0,0.1)';
+          ctx.shadowOffsetY = 2;
+          ctx.fillText(text, radius - 20, 0);
+          ctx.restore();
+        });
+      }
+
+      async spin() {
+        if (this.isSpinning) return;
+        this.isSpinning = true;
+        
+        const spinAngle = 360 * 10 + Math.random() * 360;
+        const duration = 5000;
+        const startTime = Date.now();
+        const initialAngle = this.startAngle;
+
+        const animate = () => {
+          const progress = Math.min((Date.now() - startTime) / duration, 1);
+          const ease = 1 - Math.pow(1 - progress, 4);
+          this.startAngle = initialAngle + (spinAngle * ease * Math.PI) / 180;
+          this.drawWheel();
+
+          if (progress < 1) {
+            requestAnimationFrame(animate);
+          } else {
+            this.startAngle %= 2 * Math.PI;
+            this.showResult();
+            this.isSpinning = false;
+          }
+        };
+        
+        animate();
+      }
+
+      showResult() {
+        const { segments } = this;
+        const arc = (2 * Math.PI) / segments.length;
+        const angle = (3 * Math.PI/2 - this.startAngle + 2 * Math.PI) % (2 * Math.PI);
+        const landedIndex = Math.floor(angle / arc) % segments.length;
+        
+        const resultEl = document.createElement('div');
+        resultEl.innerHTML = `
+          <div style="
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 2rem;
+            border-radius: 1rem;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+            text-align: center;
+          ">
+            <h3 style="margin:0 0 1rem">🎉 抽奖结果 🎉</h3>
+            <div style="font-size: 1.5rem; color: var(--primary-color)">
+              ${segments[landedIndex]}
+            </div>
+          </div>
+        `;
+        document.body.appendChild(resultEl);
+        setTimeout(() => resultEl.remove(), 2000);
+      }
+    }
+
+    // 初始化转盘
+    const wheel = new LuckyWheel('wheelCanvas');
+    wheel.updateSegments(
+      document.getElementById('segmentsInput').value
+        .split(/[,，]/)
+        .map(s => s.trim())
+        .filter(s => s)
+    );
+
+    // 事件绑定
+    document.getElementById('updateBtn').addEventListener('click', () => {
+      try {
+        const texts = document.getElementById('segmentsInput').value
+          .split(/[,，]/)
+          .map(s => s.trim())
+          .filter(s => s);
+        
+        if ([...new Set(texts)].length !== texts.length) {
+          throw new Error('存在重复奖品');
+        }
+        
+        wheel.updateSegments(texts);
+      } catch (error) {
+        alert(error.message);
+      }
+    });
+
+    document.getElementById('spinBtn').addEventListener('click', () => wheel.spin());
+  </script>
+</body>
+</html>
